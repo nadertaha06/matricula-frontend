@@ -5,3 +5,7 @@ dist
 .Codex
 coverage
 test-results
+
+tests
+scripts
+__pycache__

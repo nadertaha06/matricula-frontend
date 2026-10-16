@@ -10,3 +10,6 @@ coverage/
 test-results/
 playwright-report/
 *.pem
+
+__pycache__/
+*.py[cod]

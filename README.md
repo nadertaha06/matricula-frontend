@@ -40,7 +40,19 @@ npm test
 npm run build
 ```
 
-CI executa testes e build e publica o artefato `dist`. A publicação na EC2 deve ser feita após configurar HTTPS e as URLs Auth0 da implantação. O compose local não altera o servidor remoto.
+CI executa testes da interface, testes de deploy/rollback e build; publica o artefato `dist`. Push na `main` também publica a imagem Docker com a tag do commit aprovado e implanta na EC2 por SSH. Pull requests executam somente CI.
+
+Configure os secrets `DOCKERHUB_TOKEN`, `HOST_TEST` e `KEY_TEST`, além da variável `EC2_HOST_KEY` com a chave pública SSH esperada do servidor. Nenhuma credencial de backend é incluída no build. Os campos públicos `VITE_AUTH0_*` são compartilhados entre o build de CI e o Docker.
+
+O deploy usa a rede Docker existente `rede` e publica o frontend somente em `127.0.0.1:5173`. Verifica `/health` e o HTML inicial, restaurando a imagem anterior em caso de falha. Não altera bancos, volumes nem os serviços backend. O gateway pode encaminhar a raiz para `matricula-frontend:80`.
+
+Para testar a implantação antes de configurar um endereço HTTPS público, abra um túnel SSH:
+
+```sh
+ssh -i /caminho/da/chave.pem -N -L 5173:127.0.0.1:5173 ubuntu@HOST_DA_EC2
+```
+
+Abra `http://localhost:5173`; mantenha esse endereço autorizado no Auth0 em callback, logout e web origins. Para acesso público, configure HTTPS e autorize a origem pública no Auth0. O SDK exige uma origem segura, com exceção de localhost. O compose local não altera o servidor remoto.
 
 ## Autorizar a SPA a acessar a API
 

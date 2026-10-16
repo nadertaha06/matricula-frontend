@@ -1,4 +1,4 @@
-name: Frontend CI
+name: Frontend CI/CD
 on:
   push:
     branches: [main]
@@ -7,9 +7,18 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  IMAGE: nadertaha06/matricula-frontend
+  VITE_AUTH0_DOMAIN: dev-ye1ln8pnfhd2hxus.us.auth0.com
+  VITE_AUTH0_CLIENT_ID: 6JJxQTtn3Z4svk1JNuGLfa0bSGl9cja8
+  VITE_AUTH0_AUDIENCE: https://matricula-api
 jobs:
   test-build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -18,12 +27,59 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - name: Verificar deploy e rollback
+        run: |
+          bash -n scripts/deploy.sh
+          python3 -m unittest discover -s tests -v
       - run: npm run build
-        env:
-          VITE_AUTH0_DOMAIN: dev-ye1ln8pnfhd2hxus.us.auth0.com
-          VITE_AUTH0_CLIENT_ID: 6JJxQTtn3Z4svk1JNuGLfa0bSGl9cja8
-          VITE_AUTH0_AUDIENCE: https://matricula-api
       - uses: actions/upload-artifact@v4
         with:
           name: frontend-dist
           path: dist/
+
+  deploy:
+    name: DockerHub e EC2
+    needs: test-build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          username: nadertaha06
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - name: Publicar imagem do commit aprovado
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+          build-args: |
+            VITE_AUTH0_DOMAIN=${{ env.VITE_AUTH0_DOMAIN }}
+            VITE_AUTH0_CLIENT_ID=${{ env.VITE_AUTH0_CLIENT_ID }}
+            VITE_AUTH0_AUDIENCE=${{ env.VITE_AUTH0_AUDIENCE }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Preparar SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.KEY_TEST }}
+          DEPLOY_HOST: ${{ secrets.HOST_TEST }}
+          HOST_PUBLIC_KEY: ${{ vars.EC2_HOST_KEY }}
+        run: |
+          set -eu
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          test -n "$HOST_PUBLIC_KEY"
+          printf '%s %s\n' "$DEPLOY_HOST" "$HOST_PUBLIC_KEY" > ~/.ssh/known_hosts
+      - name: Implantar frontend e verificar saude
+        env:
+          DEPLOY_HOST: ${{ secrets.HOST_TEST }}
+          IMAGE_TAG: ${{ env.IMAGE }}:${{ github.sha }}
+        run: |
+          set -eu
+          ssh -i ~/.ssh/deploy_key "ubuntu@$DEPLOY_HOST" bash -s -- "$IMAGE_TAG" < scripts/deploy.sh
