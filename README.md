@@ -2,6 +2,8 @@
 
 React + Vite + SDK oficial Auth0. Login, catálogo com filtros, solicitações, cancelamento, histórico, posição na lista de espera e administração por permissão.
 
+**Publicado em https://13.220.42.157:8080/** (HTTPS pelo API Gateway do `matricula-infra`).
+
 ## Rodar localmente
 
 Node 24 e npm. Com as APIs nas portas 8001–8003:
@@ -44,15 +46,9 @@ CI executa testes da interface, testes de deploy/rollback e build; publica o art
 
 Configure os secrets `DOCKERHUB_TOKEN`, `HOST_TEST` e `KEY_TEST`, além da variável `EC2_HOST_KEY` com a chave pública SSH esperada do servidor. Nenhuma credencial de backend é incluída no build. Os campos públicos `VITE_AUTH0_*` são compartilhados entre o build de CI e o Docker.
 
-O deploy usa a rede Docker existente `rede` e publica o frontend somente em `127.0.0.1:5173`. Verifica `/health` e o HTML inicial, restaurando a imagem anterior em caso de falha. Não altera bancos, volumes nem os serviços backend. O gateway pode encaminhar a raiz para `matricula-frontend:80`.
+O deploy usa a rede Docker existente `rede` e publica o frontend somente em `127.0.0.1:5173`. Verifica `/health` e o HTML inicial, restaurando a imagem anterior em caso de falha. Não altera bancos, volumes nem os serviços backend. O API Gateway (`matricula-infra`, porta 8080 em HTTPS) encaminha a raiz para `matricula-frontend:80`.
 
-Para testar a implantação antes de configurar um endereço HTTPS público, abra um túnel SSH:
-
-```sh
-ssh -i /caminho/da/chave.pem -N -L 5173:127.0.0.1:5173 ubuntu@HOST_DA_EC2
-```
-
-Abra `http://localhost:5173`; mantenha esse endereço autorizado no Auth0 em callback, logout e web origins. Para acesso público, configure HTTPS e autorize a origem pública no Auth0. O SDK exige uma origem segura, com exceção de localhost. O compose local não altera o servidor remoto.
+No Auth0, a SPA autoriza `https://13.220.42.157:8080` e `http://localhost:5173` em callback, logout e web origins. A porta faz parte da origem. O SDK exige uma origem segura (HTTPS), com exceção de localhost. Logins por e-mail/senha e pelo Google são identidades diferentes no Auth0: cada uma recebe seu próprio papel.
 
 ## Autorizar a SPA a acessar a API
 
